@@ -1,0 +1,138 @@
+// Pre-Op Check - Medical Patient Instruction Management System
+// Prisma Schema for SQLite (Local-first MVP)
+// Implements NICE Guidelines for Pre-Operative Care
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// Patient Model with Categorized Risk Factors
+// Risk factors are grouped into clinical categories for better organization
+
+model Patient {
+  id               String   @id @default(cuid())
+  name             String
+  phone            String
+  procedureDate    DateTime
+  procedureType    String
+  
+  // ============================================
+  // METABOLIC & ENDOCRINE RISK FACTORS
+  // ============================================
+  riskDiabetesType1    Boolean @default(false)
+  riskDiabetesType2    Boolean @default(false)
+  riskThyroidDisorder  Boolean @default(false)
+  
+  // ============================================
+  // CARDIOVASCULAR RISK FACTORS
+  // ============================================
+  riskBloodThinner     Boolean @default(false)  // Anticoagulants (Warfarin, DOACs)
+  riskAntiplatelet     Boolean @default(false)  // Aspirin, Clopidogrel
+  riskHypertension     Boolean @default(false)
+  riskHeartFailure     Boolean @default(false)
+  riskAtrialFib        Boolean @default(false)  // AF - often on anticoagulants
+  riskPacemaker        Boolean @default(false)  // ICD/Pacemaker
+  
+  // ============================================
+  // RESPIRATORY RISK FACTORS
+  // ============================================
+  riskAsthma           Boolean @default(false)
+  riskCOPD             Boolean @default(false)
+  riskSleepApnoea      Boolean @default(false)  // OSA - airway concerns
+  
+  // ============================================
+  // RENAL & HEPATIC RISK FACTORS
+  // ============================================
+  riskKidneyDisease    Boolean @default(false)  // CKD - contrast/drug concerns
+  riskLiverDisease     Boolean @default(false)
+  
+  // ============================================
+  // ALLERGY RISK FACTORS
+  // ============================================
+  riskLatexAllergy     Boolean @default(false)
+  riskContrastAllergy  Boolean @default(false)  // Iodine contrast
+  riskDrugAllergies    Boolean @default(false)  // NKDA or specific allergies
+  
+  // ============================================
+  // LIFESTYLE RISK FACTORS
+  // ============================================
+  riskSmoker           Boolean @default(false)
+  riskAlcohol          Boolean @default(false)  // Heavy alcohol use
+  riskObesity          Boolean @default(false)  // BMI > 30
+  
+  // ============================================
+  // OTHER CLINICAL RISK FACTORS
+  // ============================================
+  riskImmunosuppressed Boolean @default(false)  // Steroids, chemo, transplant
+  riskPregnancy        Boolean @default(false)
+  riskFrailty          Boolean @default(false)  // Elderly/frail
+  riskCognitiveImpair  Boolean @default(false)  // Dementia, confusion
+  
+  // Patient Status
+  status           String   @default("ON_TRACK") // ON_TRACK, AT_RISK, CANCELLED
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  scheduledMessages ScheduledMessage[]
+
+  @@index([procedureDate])
+  @@index([status])
+}
+
+// Protocol Templates - Based on NICE Pre-Operative Guidelines
+// Reference: NICE NG180 - Perioperative care in adults
+// requiredRiskTag supports the new expanded risk factors
+
+model ProtocolTemplate {
+  id              String  @id @default(cuid())
+  procedureType   String
+  daysOffset      Int
+  messageContent  String
+  taskDescription String?
+  requiresConfirmation Boolean @default(true)
+  niceReference   String?
+  requiredRiskTag String? // Supports: diabetes, blood_thinner, antiplatelet, respiratory, renal, allergy, smoker, obesity, immunosuppressed, pregnancy, cardiac, frailty, etc.
+  priority        Int     @default(0)
+  category        String  @default("general")
+
+  @@index([procedureType])
+  @@unique([procedureType, daysOffset, requiredRiskTag])
+}
+
+// Scheduled Messages with confirmation tracking
+
+model ScheduledMessage {
+  id                String    @id @default(cuid())
+  patientId         String
+  sendAt            DateTime
+  messageContent    String
+  taskDescription   String?
+  requiresConfirmation Boolean @default(true)
+  
+  isSent            Boolean   @default(false)
+  status            String    @default("PENDING")
+  sentAt            DateTime?
+  
+  confirmationToken String?   @unique
+  confirmedAt       DateTime?
+  rejectedAt        DateTime?
+  patientResponse   String?
+  patientNote       String?
+  
+  niceReference     String?
+  category          String    @default("general")
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([sendAt])
+  @@index([patientId])
+  @@index([status])
+  @@index([confirmationToken])
+}
